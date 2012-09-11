@@ -14,30 +14,33 @@ type Msg struct {
 
 type ConnMap struct {
     conns map[string]net.Conn
-    mutex sync.Mutex
+    mutex sync.RWMutex
 }
 
 func (cm *ConnMap) Insert(owner string, conn net.Conn) {
     cm.mutex.Lock()
+    defer cm.mutex.Unlock()
+
     cm.conns[owner] = conn
-    cm.mutex.Unlock()
 }
 
 func (cm *ConnMap) Exists(owner string) (bool) {
-    cm.mutex.Lock()
+    cm.mutex.RLock()
+    defer cm.mutex.RUnlock()
+
     _, ok := cm.conns[owner]
-    cm.mutex.Unlock()
     return ok
 }
 
 func (cm *ConnMap) Delete(owner string) {
     cm.mutex.Lock()
+    defer cm.mutex.Unlock()
+
     delete(cm.conns, owner)
-    cm.mutex.Unlock()
 }
 
 var read = make(chan Msg, 10)
-var conns = ConnMap{make(map[string]net.Conn), sync.Mutex{}}
+var conns = ConnMap{make(map[string]net.Conn), sync.RWMutex{}}
 
 func main() {
     ln, err := net.Listen("tcp", ":5000")
@@ -117,10 +120,10 @@ func broadcastMsg() {
         buf = append(buf, msg.owner...)
         buf = append(buf, ": "...)
         buf = append(buf, msg.data...)
-        conns.mutex.Lock()
+        conns.mutex.RLock()
         for _,conn := range conns.conns {
             conn.Write(buf)
         }
-        conns.mutex.Unlock()
+        conns.mutex.RUnlock()
     }
 }
